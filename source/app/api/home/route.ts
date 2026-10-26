@@ -1,0 +1,21 @@
+import { context, snapshot, json, fail, requireSameOrigin } from '../../../lib/home-server';
+import { HomeError } from '../../../lib/home-domain.mjs';
+import { applyStoredOperation } from '../../../lib/home-repository.mjs';
+export const dynamic='force-dynamic';
+export async function GET(req:Request){try{
+  const view=await snapshot(await context());
+  if(new URL(req.url).searchParams.get('since')===view.syncTag){const {state,...meta}=view;return json({...meta,unchanged:true})}
+  return json(view);
+}catch(e){return fail(e)}}
+export async function POST(req:Request){
+  try{
+    requireSameOrigin(req);const c=await context();
+    if(Number(req.headers.get('content-length')||0)>2*1024*1024)throw new HomeError('内容太大，请分批导入。',413);
+    const raw=await req.text();if(raw.length>2*1024*1024)throw new HomeError('内容太大，请分批导入。',413);
+    let op;try{op=JSON.parse(raw)}catch{throw new HomeError('请求内容无效。')}
+    if(typeof op.id!=='string'||!/^[a-zA-Z0-9_-]{8,100}$/.test(op.id))throw new HomeError('操作编号无效。');
+    const photoIds=op.kind==='idea.done'?(await c.db.prepare('SELECT id FROM photos').all<{id:string}>()).results.map(p=>p.id):[];
+    await applyStoredOperation(c.db,op,{...c.member,photoIds,canManageSharedImport:c.canManagePasswords},c.now);
+    return json(await snapshot(c));
+  }catch(e){return fail(e)}
+}

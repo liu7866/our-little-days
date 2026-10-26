@@ -1,0 +1,9 @@
+node_modules/
+**/dist/
+**/dist-node/
+**/data/
+**/backups/
+.env*
+.dev.vars*
+.wrangler/
+.sites-runtime/
